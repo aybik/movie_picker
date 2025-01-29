@@ -1,4 +1,6 @@
 raw_data/
+processed_data/
+results/
 
 # Standard python ignores
 *.egg-info
