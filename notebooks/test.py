@@ -4,6 +4,7 @@ from nltk.corpus import stopwords
 from nltk import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 def text_preprocess(sentence):
     # Basic cleaning
@@ -59,3 +60,16 @@ def data_preproc(df):
     cat_processing_genre(df,'genre_list')
     cat_processing_lan(df, 'language')
     return df
+
+def text_encode(df):
+    vectorizer =TfidfVectorizer()
+    X = vectorizer.fit_transform(df['description'])
+    X = pd.DataFrame(
+        X.toarray(),
+        columns = vectorizer.get_feature_names_out()
+        )
+    return X
+
+def test_func():
+    import os
+    print(os.path.dirname(__file__))
