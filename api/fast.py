@@ -1,13 +1,14 @@
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from movie_picker.moviepicker import preprocessor, model
+from moviepicker import preprocessor, model
 import pickle
+import os
 
 app = FastAPI()
-app.state.model = pickle.load(open(os.path.join(os.path.dirname(__file__),"models/knn_model.pkl"), "rb"))
-app.state.data = pd.read_csv(os.path.join(os.path.dirname(__file__),"final_set_a.csv")) ###EDIT
-app.state.matrix = pickle.load(open(os.path.join(os.path.dirname(__file__),"models/matrix.pkl"), "rb"))
+app.state.model = pickle.load(open(os.path.join(os.path.dirname(os.path.dirname(__file__)),"models/knn_model.pkl"), "rb"))
+app.state.data = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(__file__)),"final_set_a.csv")) ###EDIT
+app.state.matrix = pickle.load(open(os.path.join(os.path.dirname(os.path.dirname(__file__)),"models/matrix.pkl"), "rb"))
 
 
 # Allowing all middleware is optional, but good practice for dev purposes
