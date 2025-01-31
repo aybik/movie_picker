@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-from sklearn.preprocessing import MultiLabelBinarizer
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) #main directory movie_picker
 
@@ -56,17 +55,12 @@ def get_set_a():
     languages = languages[languages['type'].isin(['Language', 'Primary language'])].drop(columns='type')
 
     # Clean up genres df
-    tmp_genres = (
-        genres.assign(genre=genres['genre'].str.lower().str.replace(' ', '_')) # Replace spaces within genres with underscores
-        .groupby('id')['genre']
-        .apply(' '.join) # Aggregates genres into a single string
-        .reset_index(name='genre_list') # Converts to DataFrame and renames the column
+    genres['genre'] = genres['genre'].apply(lambda x: x.lower().replace(' ', '_'))
+    new_genres = (
+        genres.groupby('id')['genre']
+        .apply(' '.join)  # Aggregates genres into a list
+        .reset_index(name='genre_list')  # Converts to DataFrame and renames the column
     )
-    encoder = MultiLabelBinarizer()
-    encoded_genres = pd.DataFrame(encoder.fit_transform(tmp_genres['genre_list'].str.split(' ')),
-                                    columns=encoder.classes_,
-                                    index=tmp_genres.index)
-    new_genres = tmp_genres[['id']].join(encoded_genres)
 
     # Clean up studios df
     new_studios = (
@@ -83,7 +77,7 @@ def get_set_a():
         .merge(new_studios, how='left', on='id') \
         .merge(new_crew, how='left', on='id')
 
-    # data["genre_list"] = data["genre_list"].apply(lambda x: x if isinstance(x, str) else "")
+    data[["language", "genre_list"]] = data[["language", "genre_list"]].fillna("")
     data[["actor_list", "studio_list"]] = data[["actor_list", "studio_list"]].applymap(lambda x: x if isinstance(x, list) else [])
 
     return data
