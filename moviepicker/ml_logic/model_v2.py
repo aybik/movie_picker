@@ -240,7 +240,7 @@ def extract_latent_embeddings(encoder_model, tfidf_array, language_data_np, genr
 
 
 
-def knn_fit(latent_embeddings, n_neighbors=5, metric='cosine'):
+def knn_fit(latent_embeddings, n_neighbors=10, metric='cosine'):
     """
     Fits a KNN model for similarity search using the latent embeddings.
 
