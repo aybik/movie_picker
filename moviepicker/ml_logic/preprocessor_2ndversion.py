@@ -8,10 +8,8 @@ from nltk import word_tokenize
 from nltk.stem import WordNetLemmatizer
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, LabelEncoder, MultiLabelBinarizer
 from sklearn.preprocessing import LabelEncoder
-from keras_preprocessing.sequence import pad_sequences
-
-
-
+# from keras_preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 def text_preprocess(sentence):
     # Basic cleaning
@@ -45,16 +43,21 @@ def num_preprocess_min(value):
     result = scaler.fit_transform(value)
     return result
 
+def fix_data_from_csv(df):
+    df[["language", "genre_list"]] = df[["language", "genre_list"]].fillna("")
+    return df
 
 ######################### NEW INPUT #########################
 
 
-def cat_processing_genre(df, column):
+def cat_processing_genre(df, column="genre_list"):
     # Initialize MultiLabelBinarizer and transform the data
     encoder = MultiLabelBinarizer()
-    df = pd.DataFrame(encoder.fit_transform(df['genre_list'].str.split(' ')),
+    genre_df = pd.DataFrame(encoder.fit_transform(df[column].str.split(' ')),
                                   columns=encoder.classes_,
                                   index=df.index)
+    df = pd.concat([df, genre_df], axis=1) ## Added by aybik
+
     return df
 
 
@@ -139,11 +142,12 @@ def encode_list_column_with_padding(df, column_name, padding_value=0, max_length
 
 
 def data_preproc(df):
+    df = fix_data_from_csv(df)
     df['description'] = df['description'].apply(text_preprocess)
-    df['date'] = num_preprocess_year(df[['date']])
+    df['year'] = num_preprocess_year(df[['year']])
     df['minute'] = num_preprocess_min(df[['minute']])
-    cat_processing_genre(df,'genre_list')
-    cat_processing_lan(df, 'language')
+    df = cat_processing_genre(df,'genre_list') ## 'df=' added by aybik
+    df = cat_processing_lan(df, 'language') ## 'df=' added by aybik
     return df
 
 def data_encode(df):
