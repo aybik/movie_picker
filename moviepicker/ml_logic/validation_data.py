@@ -60,7 +60,7 @@ def clean_films_data(films: pd.DataFrame) -> pd.DataFrame:
     films = films.drop(columns='poster_url', errors='ignore')
     films['year'] = pd.to_numeric(films['year'], errors='coerce').astype('Int64')
     films['key'] = films['film_name'] + films['year'].apply(
-        lambda x: f" ({int(x)})" if not pd.isna(x) else ''
+        lambda x: '' if pd.isna(x) else f" ({int(x)})"
     )
     films = films.drop(columns='year')
 
@@ -101,14 +101,14 @@ def filter_common_keys(validation_dataset: pd.DataFrame, data_dataset: pd.DataFr
 
     return validation_dataset[validation_dataset['key'].map(is_common)]
 
-def main():
+def get_filtered_data():
     """
     Main function to load, clean, merge, and filter datasets.
     """
 
     # Load datasets
     films = load_dataset('../../raw_data/set_b/films.csv', skip_bad_lines=True)
-    ratings = load_dataset('../../raw_data/set_b/films.csv')
+    ratings = load_dataset('../../raw_data/set_b/ratings.csv')
     data_dataset = load_pickle('../../artifacts/data_encode.pkl')
 
     if films is None or ratings is None or data_dataset is None:
