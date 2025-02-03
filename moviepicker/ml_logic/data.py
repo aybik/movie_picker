@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import numpy as np
 
 parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) #main directory movie_picker
 
@@ -98,4 +99,46 @@ def get_set_a():
         # data.genre_list has ''
 
 def get_set_b():
-    pass
+    # Load csv file from raw_data/set_b folder
+    ratings = pd.read_csv(os.path.join(parent_dir,'raw_data/set_b/title.ratings.tsv'), sep="\t", na_values=["", "NA", "None"])
+    movies = pd.read_csv(os.path.join(parent_dir,'raw_data/set_b/title.basics.tsv'), sep="\t", na_values=["", "NA", "None"])
+
+    # Clean up movie df
+    movies = movies[['tconst','primaryTitle','startYear']]
+    movies = movies.dropna()
+    movies = movies[~movies['primaryTitle'].str.startswith(('Episode ', 'Épisode ', 'Pilot', 'Part 1', 'Part 2', 'Part 3'))]
+    movies['key'] = movies['primaryTitle'] + " (" + movies['startYear'] + ")"
+
+    # Merge into 1 df
+    data = movies.merge(ratings, how='inner', on='tconst')
+
+    # Eliminate duplicates
+    unique_value = data['key'].value_counts()
+    filter = unique_value[unique_value == 1].index
+    data = data[data['key'].isin(filter)]
+
+    return data
+
+def get_data():
+    set_a = get_set_a()
+    set_b = get_set_b()
+    data = pd.merge(set_a, set_b[['key','averageRating']], how='left', on='key')
+    data['averageRating'] = data['averageRating']/2 #convert scale 10 in imdb to scale 5 in letterboxd
+
+    # Compute combined_rating
+    def combine_ratings(row):
+        if pd.isna(row['averageRating']) and not pd.isna(row['rating']):
+            return row['rating']  # Keep rating if averageRating is NaN
+        elif pd.isna(row['rating']) and not pd.isna(row['averageRating']):
+            return row['averageRating']  # Keep averageRating if rating is NaN
+        elif not pd.isna(row['rating']) and not pd.isna(row['averageRating']):
+            return (row['rating'] + row['averageRating']) / 2  # Average both ratings if both are available
+        return np.nan
+
+    data['combined_rating'] = data.apply(combine_ratings, axis=1).round(2)
+
+    # Clean up unmeaningful data
+    data = data.dropna(subset=['year']) # Drop movies with no year
+    data = data[~((data['actor_list'].apply(lambda x: isinstance(x, list) and len(x) == 0)) & (data['combined_rating'].isnull()))] # Drop movies which have no actor_list AND no rating
+
+    return data

@@ -43,6 +43,17 @@ def num_preprocess_min(value):
     result = scaler.fit_transform(value)
     return result
 
+def num_preprocess_rating(value):
+    value = value.copy()
+
+    median_value = value.median()
+    value.fillna(median_value, inplace=True) # Impute NaN values with median
+
+    scaler = MinMaxScaler()
+    result = scaler.fit_transform(value.to_numpy().reshape(-1, 1))  # Ensure 2D input
+
+    return result.flatten()
+
 def fix_data_from_csv(df):
     df[["language", "genre_list"]] = df[["language", "genre_list"]].fillna("")
     return df
@@ -141,6 +152,7 @@ def data_preproc(df):
     df['description'] = df['description'].apply(text_preprocess)
     df['year'] = num_preprocess_year(df[['year']])
     df['minute'] = num_preprocess_min(df[['minute']])
+    df.loc[:, 'combined_rating'] = num_preprocess_rating(df[['combined_rating']]).round(2)
     df = cat_processing_genre(df,'genre_list')
     df = cat_processing_lan(df, 'language')
     return df
