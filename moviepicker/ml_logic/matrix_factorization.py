@@ -118,7 +118,7 @@ def main(df):
     model_path = '../../artifacts/fitted_svd.pkl'
     predictions_path = '../../artifacts/predictions.pkl'
 
-    dataset_df = load_pickle(dataset_df)
+    dataset_df = load_pickle(dataset_path)
     data = load_pickle(data_path) or load_data(dataset_df)
     trainset = load_pickle(trainset_path)
     testset = load_pickle(testset_path)
