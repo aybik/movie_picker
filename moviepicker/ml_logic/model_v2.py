@@ -7,22 +7,29 @@ from tensorflow.keras.callbacks import EarlyStopping
 
 
 # Vectorize descriptions function is changed to give array rather than matrix
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.neighbors import NearestNeighbors
+from sklearn.feature_extraction.text import TfidfVectorizer
+
 def vectorize_descriptions(df, text_column, tfidf_dim=2500):
     """
-    Vectorize movie descriptions using TF-IDF.
+    Vectorizes movie descriptions using TF-IDF with a fixed vocabulary size.
 
-    Args:
-        df: The DataFrame containing movie descriptions.
-        text_column: The column in the DataFrame that contains descriptions.
+    Parameters:
+        df (pd.DataFrame): The dataset containing movie descriptions.
+        text_column (str): The column in the DataFrame that contains descriptions.
+        tfidf_dim (int): The maximum number of features for TF-IDF.
 
     Returns:
-        tfidf_matrix: The TF-IDF matrix.
-        vectorizer: The fitted TfidfVectorizer object (useful if needed later).
+        tuple: (tfidf_array, vectorizer)
+            tfidf_array (np.array): TF-IDF vector representation of descriptions.
+            vectorizer (TfidfVectorizer): The trained TF-IDF vectorizer.
     """
     vectorizer = TfidfVectorizer(max_features=tfidf_dim)
     tfidf_matrix = vectorizer.fit_transform(df[text_column])
-    tfidf_array = tfidf_matrix.toarray()
-    return tfidf_array
+
+    return tfidf_matrix.toarray(), vectorizer  # Return both array & vectorizer
+
 
 
 # Create np arrays for tfidf, language, genre to be utilized in autoencoder
@@ -40,7 +47,7 @@ def prepare_model_inputs(df, tfidf_dim=2500):
     # ---------------------------
     # 1. TF-IDF Vectorization
     # ---------------------------
-    tfidf_array = vectorize_descriptions(df, 'description', tfidf_dim)
+    tfidf_array, vectorizer = vectorize_descriptions(df, 'description', tfidf_dim)
 
     # ---------------------------
     # 2. Language Encoding
@@ -57,8 +64,7 @@ def prepare_model_inputs(df, tfidf_dim=2500):
     genres_data_np = df[genre_columns].values.astype(np.int32)
     num_genres = len(genre_columns)  # Automatically detect number of genres
 
-    return tfidf_array, num_languages, language_data_np, genres_data_np, num_genres
-
+    return tfidf_array, vectorizer, num_languages, language_data_np, genres_data_np, num_genres
 
 # Create encoder which will be used in autoencoder function and optimized during autoencoder.fit
 def build_encoder(tfidf_dim, num_languages, num_genres):
@@ -98,7 +104,7 @@ def build_encoder(tfidf_dim, num_languages, num_genres):
     # Genres Branch (One-hot encoded)
     # -------------------------
     genre_input = tf.keras.layers.Input(shape=(num_genres,), name="genre_input")
-    # Optionally, pass the one-hot vector through a dense layer to learn a compressed representation.
+    # Pass the one-hot vector through a dense layer to learn a compressed representation.
     genre_dense = tf.keras.layers.Dense(32, activation='relu', name="genre_dense")(genre_input)
 
     # -------------------------
@@ -189,7 +195,7 @@ def build_autoencoder(tfidf_dim, num_languages, num_genres):
     return autoencoder_model, encoder
 
 
-def train_autoencoder(autoencoder_model, tfidf_array, language_data_np, genres_data_np, batch_size=16, epochs=50):
+def train_autoencoder(autoencoder_model, tfidf_array, language_data_np, genres_data_np, batch_size=16, epochs=100):
     """
     Trains the autoencoder model using the given input data.
 
@@ -302,5 +308,62 @@ def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_re
 
     # Retrieve movie names for recommendations
     recommendations = [(df.loc[idx, "name"], dist) for idx, dist in filtered_recs]
+
+    return recommendations
+
+
+def recommend_movies_by_details(user_description, user_language, user_genres, df, encoder_model, knn_model, vectorizer, tfidf_dim=2500):
+    """
+    Finds similar movies based on a user-provided description, language, and genres.
+
+    Parameters:
+        user_description (str): The user's movie description input.
+        user_language (str): The user's selected language.
+        user_genres (list): A list of genres selected by the user.
+        df (pd.DataFrame): The dataset containing movies.
+        encoder_model (tf.keras.Model): The trained encoder model.
+        knn_model (NearestNeighbors): The trained KNN model.
+        vectorizer (TfidfVectorizer): The TF-IDF vectorizer used during training.
+        tfidf_dim (int): The number of TF-IDF features (default: 2500).
+
+    Returns:
+        list: A list of recommended movie names and distances.
+    """
+
+    # 🔹 Auto-detect genre columns
+    genre_columns = [col for col in df.columns if col in [
+        'action', 'adventure', 'animation', 'comedy', 'crime', 'documentary',
+        'drama', 'family', 'fantasy', 'history', 'horror', 'music', 'mystery',
+        'romance', 'science_fiction', 'thriller', 'tv_movie', 'war', 'western'
+    ]]
+
+    # 🔹 Auto-create language encoder (maps language names to integer encodings)
+    language_encoder = {lang: idx for idx, lang in enumerate(df["language"].unique())}
+
+    # 1️⃣ Convert the user description to a TF-IDF vector
+    user_tfidf = vectorizer.transform([user_description]).toarray()
+
+    # 2️⃣ Encode the user language
+    user_language_encoded = np.array([[language_encoder.get(user_language, 0)]], dtype=np.int32)
+
+    # 3️⃣ One-hot encode the genres
+    user_genre_vector = np.zeros((1, len(genre_columns)), dtype=np.int32)
+    for genre in user_genres:
+        if genre in genre_columns:
+            user_genre_vector[0, genre_columns.index(genre)] = 1
+
+    # 4️⃣ Generate latent embedding using the encoder model
+    user_embedding = encoder_model.predict([user_tfidf, user_language_encoded, user_genre_vector])
+
+    # 5️⃣ Use KNN to find similar movies
+    distances, indices = knn_model.kneighbors(user_embedding)
+
+    # Convert to 1D arrays
+    indices = indices.flatten()
+    distances = distances.flatten()
+
+    # Retrieve movie names for recommendations
+    df = df.reset_index(drop=True)
+    recommendations = [(df.loc[idx, "name"], dist) for idx, dist in zip(indices, distances)]
 
     return recommendations
