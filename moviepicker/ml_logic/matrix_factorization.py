@@ -104,7 +104,7 @@ def evaluate_model(testset, model):
 
     return predictions, rmse_score
 
-def main(df):
+def main_pipeline():
     """
     Wrapper function to execute the full pipeline.
 
@@ -119,6 +119,10 @@ def main(df):
     predictions_path = '../../artifacts/predictions.pkl'
 
     dataset_df = load_pickle(dataset_path)
+
+    if predictions is None:
+        print(f"Dataframe couldn't be loaded! Check if data path is correct.")
+
     data = load_pickle(data_path) or load_data(dataset_df)
     trainset = load_pickle(trainset_path)
     testset = load_pickle(testset_path)
