@@ -192,12 +192,40 @@ def train_autoencoder(autoencoder_model, tfidf_array, language_data_np, genres_d
     return history
 
 
-def extract_latent_embeddings(encoder_model, tfidf_array, language_data_np, genres_data_np):
+def load_trained_encoder(autoencoder_path, tfidf_dim, num_languages, num_genres):
+    """
+    Loads a trained autoencoder model, rebuilds the encoder, and transfers the encoder's weights.
+
+    Parameters:
+        autoencoder_path (str): Path to the saved autoencoder model file (.keras format).
+        tfidf_dim (int): Dimensionality of the TF-IDF vector.
+        num_languages (int): Number of unique languages.
+        num_genres (int): Number of genres.
+
+    Returns:
+        encoder_trained (tf.keras.Model): The trained encoder model with weights loaded.
+    """
+    # Load the trained autoencoder model
+    trained_autoencoder = tf.keras.models.load_model(autoencoder_path)
+    print("✅ Autoencoder model loaded successfully!")
+
+    # Rebuild the encoder model structure
+    encoder_trained = build_encoder(tfidf_dim, num_languages, num_genres)
+    print("✅ Encoder model structure rebuilt!")
+
+    # Transfer weights from the trained autoencoder to the encoder
+    encoder_trained.set_weights(trained_autoencoder.get_weights()[:len(encoder_trained.weights)])
+    print("✅ Encoder weights loaded successfully!")
+
+    return encoder_trained
+
+
+def extract_latent_embeddings(encoder_trained, tfidf_array, language_data_np, genres_data_np):
     """
     Extracts latent embeddings from the encoder model.
 
     Parameters:
-        encoder_model (tf.keras.Model): The trained encoder model.
+        encoder_traşned (tf.keras.Model): The trained encoder model.
         tfidf_array (np.array): TF-IDF input data.
         language_data_np (np.array): Encoded language data.
         genres_data_np (np.array): One-hot encoded genres data.
@@ -205,7 +233,7 @@ def extract_latent_embeddings(encoder_model, tfidf_array, language_data_np, genr
     Returns:
         latent_embeddings (np.array): The extracted latent representations.
     """
-    latent_embeddings = encoder_model.predict([tfidf_array, language_data_np, genres_data_np])
+    latent_embeddings = encoder_trained.predict([tfidf_array, language_data_np, genres_data_np])
     return latent_embeddings
 
 #############################
