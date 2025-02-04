@@ -289,13 +289,26 @@ def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_re
     indices = indices.flatten()
     distances = distances.flatten()
 
-    # Exclude the queried movie (sample_index) and limit the recommendations
-    recommendations = [
-        (df.iloc[idx]["name"], dist) for idx, dist in zip(indices, distances) if idx != sample_index
-    ][:n_recommendations]
+    # Extract the top 20 most similar movies (excluding the input movie)
+    similar_movies = [df.iloc[idx]["name"] for idx in indices if idx != sample_index][:20]
+    similar_distances = [dist for idx, dist in zip(indices, distances) if idx != sample_index][:20]
 
-    return recommendations
+    # Compute rating effects inside this function
+    rating_effects = []
+    for movie in similar_movies:
+        rating = df.loc[df["name"] == movie, "combined_rating"]
+        if not rating.empty:
+            rating_effects.append(float(rating.values[0]) * 0.05)  # Scale the rating
+        else:
+            rating_effects.append(0)  # Default to 0 if no rating found
 
+    # Adjust similarity scores by adding rating effects
+    adjusted_scores = [dist + rating for dist, rating in zip(similar_distances, rating_effects)]
+
+    # Sort by adjusted scores (lower is better)
+    sorted_recommendations = sorted(zip(similar_movies, adjusted_scores), key=lambda x: x[1])[:n_recommendations]
+
+    return sorted_recommendations if sorted_recommendations else {"message": "No recommendations found."}
 
 def recommend_movies_by_details(user_description, user_language, user_genres, df, encoder_model, knn_model, vectorizer, tfidf_dim=2500, n_recommendations=5):
     """
