@@ -98,8 +98,8 @@ def filter_common_keys(validation_dataset: pd.DataFrame, data_dataset: pd.DataFr
     unique_key_values_validation_dataset = set(validation_dataset['key'].unique())
     common_values = unique_key_values_data_dataset.intersection(unique_key_values_validation_dataset)
     is_common = {x: x in common_values for x in unique_key_values_validation_dataset}
-
-    return validation_dataset[validation_dataset['key'].map(is_common)]
+    filtered_validation_data = validation_dataset[validation_dataset['key'].map(is_common)]
+    return filtered_validation_data
 
 def get_filtered_data():
     """
