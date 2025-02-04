@@ -1,7 +1,7 @@
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from moviepicker.ml_logic import preprocessor, model
+from moviepicker.ml_logic import archived_preprocessor, model
 import pickle
 import os
 
