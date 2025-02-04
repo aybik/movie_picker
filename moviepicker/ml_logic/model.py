@@ -13,7 +13,7 @@ def vectorize_descriptions(df, text_column):
         tfidf_matrix: The TF-IDF matrix.
         vectorizer: The fitted TfidfVectorizer object (useful if needed later).
     """
-    vectorizer = TfidfVectorizer()
+    vectorizer = TfidfVectorizer(max_features=10000)
     tfidf_matrix = vectorizer.fit_transform(df[text_column])
     return tfidf_matrix
 
@@ -23,11 +23,11 @@ def knn_fit(tfidf_matrix):
     knn.fit(tfidf_matrix)
     return knn
 
-def verify_input(df, input_name, name_column):
-    if input_name not in df[name_column].values:
-        raise ValueError(f"Movie '{input_name}' not found in the DataFrame.")
+def verify_input(df, input_movie_name, name_column):
+    if input_movie_name not in df[name_column].values:
+        raise ValueError(f"Movie '{input_movie_name}' not found in the DataFrame.")
 
-def get_similar_movies_knn(knn, tfidf_matrix, df, input_name, name_column, n_neighbors=5):
+def get_similar_movies_knn(model, tfidf_matrix, df, input_movie_name, name_column='key', n_neighbors=10):
     """
     Find similar movies using KNN based on a TF-IDF matrix.
 
@@ -44,12 +44,12 @@ def get_similar_movies_knn(knn, tfidf_matrix, df, input_name, name_column, n_nei
     # Get the index of the input movie
     # if input_name not in df[name_column].values:
     #     raise ValueError(f"Movie '{input_name}' not found in the DataFrame.")
-    verify_input(df, input_name, name_column)
+    verify_input(df, input_movie_name, name_column)
 
-    idx = df[df[name_column] == input_name].index[0] #can be moved to verify_input
+    idx = df[df[name_column] == input_movie_name].index[0] #can be moved to verify_input
 
     # Find nearest neighbors
-    distances, indices = knn.kneighbors(tfidf_matrix[idx], n_neighbors=n_neighbors + 1)
+    distances, indices = model.kneighbors(tfidf_matrix[idx], n_neighbors=n_neighbors + 1)
 
     # Exclude the input movie itself
     similar_movies = []
