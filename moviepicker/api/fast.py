@@ -22,6 +22,7 @@ app.state.encoder_trained = load_model(os.path.join(parent_dir,"models/encoder_m
 app.state.data = pd.read_pickle(os.path.join(parent_dir,"data_encode.pkl"))
 app.state.full_data = pd.read_pickle(os.path.join(parent_dir,"streamlit.pkl"))
 
+
 # Allowing all middleware is optional, but good practice for dev purposes
 app.add_middleware(
     CORSMiddleware,
