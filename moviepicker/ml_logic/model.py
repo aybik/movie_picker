@@ -55,7 +55,8 @@ def get_similar_movies_knn(model, tfidf_matrix, df, input_movie_name, name_colum
     similar_movies = []
     for i in range(1, len(indices.flatten())):
         similar_movies.append({
-            'input_name': df.iloc[indices.flatten()[i]][name_column],
+            'movie_name': df.iloc[indices.flatten()[i]][name_column],
             'similarity_score': 1 - distances.flatten()[i]  # Convert distance to similarity
         })
-    return similar_movies
+
+    return [x['movie_name'] for x in similar_movies]
