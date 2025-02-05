@@ -1,6 +1,7 @@
 raw_data/
 processed_data/
 aybik_notebooks/
+archived/
 # Standard python ignores
 *.egg-info
 .coverage
