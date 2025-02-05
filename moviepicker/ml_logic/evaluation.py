@@ -120,6 +120,55 @@ def create_database_indexes(db_path: str):
         except sqlite3.OperationalError as e:
             print("SQLite error:", e)
 
+# Main Evaluation Logic
+def get_evaluation_score(model, tfidf_matrix, processed_data, filtered_validation_data, db_path=None,
+                         top_movies_path = '../../artifacts/top25k_rated_movies.pkl',
+                         similar_movies_path = '../../artifacts/knn_baseline_similar_movies_top25k.pkl',
+                         results_path = '../../artifacts/results_knn_baseline_top25k.pkl'):
+    """
+    Executes the main workflow for movie evaluation.
+    """
+
+    # Load or compute top 25,000 movies
+    if os.path.exists(top_movies_path):
+        print("Loading top 25,000 movies from pickle...")
+        top_movies = load_pickle(top_movies_path)
+    else:
+        print("Fetching top 25,000 movies...")
+        top_movies = get_top_movies(filtered_validation_data, cutoff=25000)
+        save_pickle(top_movies, top_movies_path)
+
+    # Load or compute similar movies
+    if os.path.exists(similar_movies_path):
+        print("Loading KNN baseline similar movies from pickle...")
+        similar_movies = load_pickle(similar_movies_path)
+    else:
+        similar_movies = {}
+        failed_indices = []
+
+        for movie in tqdm(top_movies):
+            try:
+                similar_movies[movie] = m.get_similar_movies_knn(model, tfidf_matrix, processed_data, movie, 'key')
+            except Exception:
+                failed_indices.append(movie)
+                print("failed")
+
+        print(f"Failed for {len(failed_indices)} movies")
+        save_pickle(similar_movies, similar_movies_path)
+
+    # Process evaluation metrics using DataFrame operations or batch processing
+    if db_path:
+        create_database_indexes(db_path)
+        print("Processing evaluation metrics with database...")
+        results = batch_process_eval_metrics(db_path, similar_movies, batch_size=3000)
+    else:
+        print("Computing evaluation metrics using DataFrame operations...")
+        results = compute_eval_metrics(filtered_validation_data, similar_movies)
+
+    save_pickle(results, results_path)
+
+    return results
+
 # Helper function to compute evaluation metrics
 def compute_eval_metrics(filtered_validation_data, similar_movies):
     """
@@ -130,7 +179,7 @@ def compute_eval_metrics(filtered_validation_data, similar_movies):
     merged_data = merged_data[merged_data['key_rec'].isin(similar_movies.keys())]
     result = merged_data.groupby('key_rec')['rating_rec'].mean().to_dict()
 
-    return result
+    return result # Not tested yet, because it is very RAM heavy
 
 
 # If the code is run directly
