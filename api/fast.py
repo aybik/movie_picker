@@ -1,19 +1,28 @@
 import pandas as pd
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from moviepicker.ml_logic import model
+from moviepicker.ml_logic import advanced_model
+
 import pickle
 import os
 import re
 import requests
 import string
 
+from tensorflow.keras.models import load_model
 
 app = FastAPI()
-app.state.model = pickle.load(open(os.path.join(os.path.dirname(os.path.dirname(__file__)),"models/knn_model.pkl"), "rb"))
-app.state.data = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(__file__)),"final_set_a.csv"))
-app.state.full_data = pd.read_csv(os.path.join(os.path.dirname(os.path.dirname(__file__)),"full_df.csv"))
-app.state.matrix = pickle.load(open(os.path.join(os.path.dirname(os.path.dirname(__file__)),"models/matrix.pkl"), "rb"))
+parent_dir = os.path.dirname(os.path.dirname(__file__))
+
+# Load pickle files
+app.state.model = pickle.load(open(os.path.join(parent_dir,"moviepicker/models/knn_20.pkl"), "rb"))
+app.state.latent_embeddings = pickle.load(open(os.path.join(parent_dir,"moviepicker/models/latent_embeddings.pkl"), "rb"))
+app.state.vectorizer = pickle.load(open(os.path.join(parent_dir,"moviepicker/models/vectorizer.pkl"), "rb"))
+app.state.encoder_trained = load_model(os.path.join(parent_dir,"models/encoder_model.keras"))
+
+# Load dataframes
+app.state.data = pd.read_pickle(os.path.join(parent_dir,"moviepicker/data_encode.pkl"))
+app.state.full_data = pd.read_pickle(os.path.join(parent_dir,"moviepicker/streamlit.pkl"))
 
 
 # Allowing all middleware is optional, but good practice for dev purposes
@@ -25,15 +34,27 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-@app.get("/predict")
+
+@app.get("/predict_name")
+
 def predict(
         input_name: str,
         n_recommendations: int
     ):
 
-    result = model.get_similar_movies_knn(app.state.model, app.state.matrix, app.state.data, input_name, "key_b", n_recommendations)
-    return [movie["input_name"] for movie in result]
+    result = advanced_model.get_movie_recommendations(input_name, app.state.data, app.state.model, app.state.latent_embeddings, n_recommendations)
+    return result
 
+@app.get("/predict_filter")
+def predict(
+        user_description: str,
+        user_language: str,
+        user_genres: str,
+        n_recommendations: int
+    ):
+    user_genres = list(user_genres)
+    result = advanced_model.recommend_movies_by_details(user_description, user_language, user_genres, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, n_recommendations)
+    return result
 
 
 @app.get("/find")
@@ -47,35 +68,11 @@ def find_movies(input_name, dataset_choice):
     same_movies_df = df[df.name == movie_name]
     return list(same_movies_df.key_b)
 
-
-
 @app.get("/get_url")
 def get_url(movie):
+    film_id = app.state.full_data[app.state.full_data["key_b"] == movie]["film_id"].iloc[0]
+    return app.state.full_data.loc[app.state.full_data['film_id']==film_id, 'streamlit_url'].iloc[0]
 
-    df = app.state.full_data
-
-    if movie in df.key_b.values:
-        film_id = df[df["key_b"] == movie]["film_id"].iloc[0]
-        return f"https://letterboxd.com/film/{film_id}/"
-
-    def clean_movie_url(movie):
-        # Remove parentheses
-        movie = re.sub(r"[()]", "", movie)
-        # Replace all punctuation with a space
-        movie = re.sub(f"[{re.escape(string.punctuation)}]", " ", movie)
-        # Replace spaces with hyphens and convert to lowercase
-        movie_modified = re.sub(r'\s+', '-', movie.lower().strip())
-
-        return f"https://letterboxd.com/film/{movie_modified}/"
-
-    movies_list = find_movies(movie[:-7], "full")
-    sorted_movies_list = sorted(movies_list)
-    if movie == sorted_movies_list[0]:
-        true_url = clean_movie_url(movie[:-7])
-    else:
-        true_url = clean_movie_url(movie)
-
-    return true_url
 
 @app.get("/get_image")
 def get_image(movie):
@@ -86,6 +83,7 @@ def get_image(movie):
         return poster
     else:
         return None
+
 @app.get("/get_description")
 def get_description(movie):
     df = app.state.full_data

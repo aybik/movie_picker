@@ -4,6 +4,9 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import NearestNeighbors
 
 ####################################
 # Data Preparation & Vectorization #
@@ -257,11 +260,6 @@ def knn_fit(latent_embeddings, n_neighbors=10, metric='cosine'):
     knn_model.fit(latent_embeddings)
     return knn_model
 
-
-import numpy as np
-import pandas as pd
-from sklearn.neighbors import NearestNeighbors
-
 def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_recommendations=5, alpha=0.05):
     """
     Finds similar movies based on the KNN model and latent embeddings, incorporating rating effects.
@@ -281,7 +279,7 @@ def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_re
     df = df.reset_index(drop=True)
 
     # Case-insensitive matching for user input
-    matched_rows = df[df["name"].str.lower() == user_input.lower()]
+    matched_rows = df[df["key"].str.lower() == user_input.lower()]
 
     if matched_rows.empty:
         return {"error": f"Movie '{user_input}' not found in dataset."}
@@ -300,13 +298,13 @@ def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_re
     similarity_scores = [1 / (1 + dist) for dist in distances]
 
     # Extract the top 20 most similar movies (excluding the input movie)
-    similar_movies = [df.iloc[idx]["name"] for idx in indices if idx != sample_index][:20]
+    similar_movies = [df.iloc[idx]["key"] for idx in indices if idx != sample_index][:20]
     similar_similarities = [sim for idx, sim in zip(indices, similarity_scores) if idx != sample_index][:20]
 
     # Compute rating effects and adjust similarity
     adjusted_similarities = []
     for movie, sim in zip(similar_movies, similar_similarities):
-        rating = df.loc[df["name"] == movie, "combined_rating"]
+        rating = df.loc[df["key"] == movie, "combined_rating"]
         if not rating.empty:
             adjusted_sim = sim + (float(rating.values[0]) * alpha)  # Increase similarity with rating
         else:
@@ -316,17 +314,12 @@ def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_re
     # Sort by adjusted similarity scores (higher is better)
     sorted_recommendations = sorted(zip(similar_movies, adjusted_similarities), key=lambda x: x[1], reverse=True)[:n_recommendations]
 # 🔹 Return only the "key" column values for recommended movies
-    recommended_keys = [df.loc[df["name"] == movie, "key"].values[0] for movie, _ in sorted_recommendations]
+    recommended_keys = [df.loc[df["key"] == movie, "key"].values[0] for movie, _ in sorted_recommendations]
 
     return recommended_keys if recommended_keys else {"message": "No recommendations found."}
 
     #return sorted_recommendations if sorted_recommendations else {"message": "No recommendations found."}
 
-
-
-
-
-import numpy as np
 
 def recommend_movies_by_details(user_description, user_language, user_genres, df, encoder_model, knn_model, vectorizer, tfidf_dim=2500, n_recommendations=5, alpha=0.05):
     """
