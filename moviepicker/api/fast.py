@@ -50,6 +50,7 @@ def predict(
     result = advanced_model.recommend_movies_by_details(user_description, user_language, user_genres, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, n_recommendations)
     return result
 
+# SOMETHING IS WRONG WITH "final"
 @app.get("/find")
 def find_movies(input_name, dataset_choice):
     if dataset_choice == "full":
