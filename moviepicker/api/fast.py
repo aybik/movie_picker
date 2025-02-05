@@ -64,15 +64,15 @@ def find_movies(input_name, dataset_choice):
 
 @app.get("/get_url")
 def get_url(movie):
-    film_id = app.state.full_data[app.state.full_data["key_b"] == movie]["film_id"].iloc[0]
+    film_id = app.state.full_data[app.state.full_data["key"] == movie]["film_id"].iloc[0]
     return app.state.full_data.loc[app.state.full_data['film_id']==film_id, 'streamlit_url'].iloc[0]
 
 @app.get("/get_image")
 def get_image(movie):
 
     df = app.state.full_data
-    if movie in df.key_b.values:
-        poster = df.loc[df.key_b == movie, "poster"].iloc[0]
+    if movie in df.key.values:
+        poster = df.loc[df.key == movie, "poster"].iloc[0]
         return poster
     else:
         return None
@@ -80,9 +80,8 @@ def get_image(movie):
 @app.get("/get_description")
 def get_description(movie):
     df = app.state.full_data
-    result = df[df["key_b"] == movie]["description"]
+    result = df[df["key"] == movie]["description"]
     return result.iloc[0]
-
 
 @app.get("/")
 def root():
