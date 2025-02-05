@@ -258,61 +258,79 @@ def knn_fit(latent_embeddings, n_neighbors=10, metric='cosine'):
     return knn_model
 
 
-def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_recommendations=5):
+import numpy as np
+import pandas as pd
+from sklearn.neighbors import NearestNeighbors
+
+def get_movie_recommendations(user_input, df, knn_model, latent_embeddings, n_recommendations=5, alpha=0.05):
     """
-    Finds similar movies based on the KNN model and latent embeddings.
+    Finds similar movies based on the KNN model and latent embeddings, incorporating rating effects.
 
     Parameters:
         user_input (str): The name of the movie to find recommendations for.
-        df (pd.DataFrame): DataFrame containing movie names.
+        df (pd.DataFrame): DataFrame containing movie names and combined ratings.
         knn_model (NearestNeighbors): The trained KNN model.
         latent_embeddings (np.array): The extracted latent embeddings.
         n_recommendations (int): Number of movie recommendations to return.
+        alpha (float): Scaling factor for rating impact on similarity. Default is 0.05.
 
     Returns:
-        list: A list of tuples containing recommended movies and their distances.
+        list: A list of tuples containing recommended movies and their adjusted similarity scores.
     """
     # Ensure DataFrame index is reset to align with latent embeddings
     df = df.reset_index(drop=True)
 
-    # Match movie name case-insensitively
+    # Case-insensitive matching for user input
     matched_rows = df[df["name"].str.lower() == user_input.lower()]
 
     if matched_rows.empty:
-        print("Movie not found.")
-        return []
+        return {"error": f"Movie '{user_input}' not found in dataset."}
 
     sample_index = matched_rows.index[0]
-    print(f"Found movie '{user_input}'.")
 
-    distances, indices = knn_model.kneighbors(latent_embeddings[sample_index].reshape(1, -1))
+    try:
+        distances, indices = knn_model.kneighbors(latent_embeddings[sample_index].reshape(1, -1))
+    except IndexError:
+        return {"error": "Invalid movie index. Check if latent embeddings align with DataFrame."}
+
     indices = indices.flatten()
     distances = distances.flatten()
 
+    # Compute similarity scores (higher similarity = more relevant)
+    similarity_scores = [1 / (1 + dist) for dist in distances]
+
     # Extract the top 20 most similar movies (excluding the input movie)
     similar_movies = [df.iloc[idx]["name"] for idx in indices if idx != sample_index][:20]
-    similar_distances = [dist for idx, dist in zip(indices, distances) if idx != sample_index][:20]
+    similar_similarities = [sim for idx, sim in zip(indices, similarity_scores) if idx != sample_index][:20]
 
-    # Compute rating effects inside this function
-    rating_effects = []
-    for movie in similar_movies:
+    # Compute rating effects and adjust similarity
+    adjusted_similarities = []
+    for movie, sim in zip(similar_movies, similar_similarities):
         rating = df.loc[df["name"] == movie, "combined_rating"]
         if not rating.empty:
-            rating_effects.append(float(rating.values[0]) * 0.05)  # Scale the rating
+            adjusted_sim = sim + (float(rating.values[0]) * alpha)  # Increase similarity with rating
         else:
-            rating_effects.append(0)  # Default to 0 if no rating found
+            adjusted_sim = sim  # No rating adjustment if rating is missing
+        adjusted_similarities.append(adjusted_sim)
 
-    # Adjust similarity scores by adding rating effects
-    adjusted_scores = [dist + rating for dist, rating in zip(similar_distances, rating_effects)]
+    # Sort by adjusted similarity scores (higher is better)
+    sorted_recommendations = sorted(zip(similar_movies, adjusted_similarities), key=lambda x: x[1], reverse=True)[:n_recommendations]
+# 🔹 Return only the "key" column values for recommended movies
+    recommended_keys = [df.loc[df["name"] == movie, "key"].values[0] for movie, _ in sorted_recommendations]
 
-    # Sort by adjusted scores (lower is better)
-    sorted_recommendations = sorted(zip(similar_movies, adjusted_scores), key=lambda x: x[1])[:n_recommendations]
+    return recommended_keys if recommended_keys else {"message": "No recommendations found."}
 
-    return sorted_recommendations if sorted_recommendations else {"message": "No recommendations found."}
+    #return sorted_recommendations if sorted_recommendations else {"message": "No recommendations found."}
 
-def recommend_movies_by_details(user_description, user_language, user_genres, df, encoder_model, knn_model, vectorizer, tfidf_dim=2500, n_recommendations=5):
+
+
+
+
+import numpy as np
+
+def recommend_movies_by_details(user_description, user_language, user_genres, df, encoder_model, knn_model, vectorizer, tfidf_dim=2500, n_recommendations=5, alpha=0.05):
     """
-    Finds similar movies based on a user-provided description, language, and genres.
+    Finds similar movies based on a user-provided description, language, and genres, incorporating rating effects.
 
     Parameters:
         user_description (str): The user's movie description input.
@@ -324,10 +342,12 @@ def recommend_movies_by_details(user_description, user_language, user_genres, df
         vectorizer (TfidfVectorizer): The TF-IDF vectorizer used during training.
         tfidf_dim (int): The number of TF-IDF features.
         n_recommendations (int): Number of movie recommendations to return.
+        alpha (float): Scaling factor for rating impact on similarity.
 
     Returns:
-        list: A list of recommended movie names and distances.
+        list: A list of recommended movie names.
     """
+
     # Define genre columns (should match those used during training)
     genre_columns = [col for col in df.columns if col in [
         'action', 'adventure', 'animation', 'comedy', 'crime', 'documentary',
@@ -335,37 +355,60 @@ def recommend_movies_by_details(user_description, user_language, user_genres, df
         'romance', 'science_fiction', 'thriller', 'tv_movie', 'war', 'western'
     ]]
 
-    # Create a language encoder mapping from language to integer (as used during training)
-    language_encoder = {lang: idx for idx, lang in enumerate(df["language"].unique())}
-
-    # 1. Convert the user description to a TF-IDF vector
+    # 1️⃣ Convert the user description to a TF-IDF vector
     user_tfidf = vectorizer.transform([user_description]).toarray()
 
-    # 2. Encode the user language (defaults to 0 if not found)
-    user_language_encoded = np.array([[language_encoder.get(user_language, 0)]], dtype=np.int32)
+    # 2️⃣ Encode the user language (defaults to English if not found)
+    if user_language in df["language"].values:
+        user_language_encoded = np.array([[df.loc[df["language"] == user_language, "language_encoded"].values[0]]], dtype=np.int32)
+    else:
+        # Default to "English"
+        default_language = "English"
+        if default_language in df["language"].values:
+            user_language_encoded = np.array([[df.loc[df["language"] == default_language, "language_encoded"].values[0]]], dtype=np.int32)
+        else:
+            user_language_encoded = np.array([[0]], dtype=np.int32)  # Fallback to 0 if "English" is not found
 
-    # 3. One-hot encode the genres
+    # 3️⃣ Extract the one-hot encoded genre vector directly
     user_genre_vector = np.zeros((1, len(genre_columns)), dtype=np.int32)
     for genre in user_genres:
         if genre in genre_columns:
             user_genre_vector[0, genre_columns.index(genre)] = 1
 
-    # 4. Generate latent embedding using the trained encoder model
+    # 4️⃣ Generate latent embedding using the trained encoder model
     user_embedding = encoder_model.predict([user_tfidf, user_language_encoded, user_genre_vector])
 
-    # 5. Use KNN to find similar movies
+    # 5️⃣ Use KNN to find similar movies
     distances, indices = knn_model.kneighbors(user_embedding)
     indices = indices.flatten()
     distances = distances.flatten()
 
-    # Limit recommendations to n_recommendations
-    filtered_recs = list(zip(indices, distances))[:n_recommendations]
+    # 6️⃣ Compute similarity scores (higher similarity = better match)
+    similarity_scores = [1 / (1 + dist) for dist in distances]
 
-    # Retrieve movie names from the DataFrame
+    # 7️⃣ Extract movie names and their similarity scores
     df = df.reset_index(drop=True)
-    recommendations = [(df.loc[idx, "name"], dist) for idx, dist in filtered_recs]
+    similar_movies = [df.iloc[idx]["name"] for idx in indices][:n_recommendations]
+    similar_similarities = [sim for sim in similarity_scores][:n_recommendations]
 
-    return recommendations
+    # 8️⃣ Adjust similarity using ratings
+    adjusted_similarities = []
+    for movie, sim in zip(similar_movies, similar_similarities):
+        rating = df.loc[df["name"] == movie, "combined_rating"]
+        if not rating.empty:
+            adjusted_sim = sim + (float(rating.values[0]) * alpha)  # Increase similarity with rating
+        else:
+            adjusted_sim = sim  # No rating adjustment if rating is missing
+        adjusted_similarities.append(adjusted_sim)
+
+    # 9️⃣ Sort by adjusted similarity scores (higher is better)
+    sorted_recommendations = sorted(zip(similar_movies, adjusted_similarities), key=lambda x: x[1], reverse=True)[:n_recommendations]
+
+    # 🔹 Return only movie names (without distances)
+    recommended_movies = [movie for movie, _ in sorted_recommendations]
+
+    return recommended_movies if recommended_movies else {"message": "No recommendations found."}
+
 
 #############################
 # Example Usage (Commented) #
