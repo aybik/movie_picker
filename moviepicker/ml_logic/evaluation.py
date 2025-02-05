@@ -100,3 +100,39 @@ def get_eval_metric(conn, query_movie, similar_movies, use_avg_per_recommendatio
     params = [query_movie] + similar_movies
     with conn:
         return conn.execute(query, params).fetchone()
+
+def create_database_indexes(db_path: str):
+    """
+    Optimizes the database by creating necessary indexes.
+    """
+    with sqlite3.connect(db_path) as conn:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA synchronous=NORMAL;")
+            conn.execute("PRAGMA cache_size=1000000;")
+            conn.execute("PRAGMA temp_store=MEMORY;")
+
+            c = conn.cursor()
+            c.execute("CREATE INDEX IF NOT EXISTS idx_key ON filtered_validation_data (key);")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_user_name ON filtered_validation_data (user_name);")
+            conn.commit()
+            print("Indexes created successfully.")
+        except sqlite3.OperationalError as e:
+            print("SQLite error:", e)
+
+# Helper function to compute evaluation metrics
+def compute_eval_metrics(filtered_validation_data, similar_movies):
+    """
+    Computes evaluation metrics using DataFrame operations.
+    """
+    filtered_data = filtered_validation_data[filtered_validation_data['rating'] >= 3.5]
+    merged_data = filtered_data.merge(filtered_data, on='user_name', suffixes=('_query', '_rec'))
+    merged_data = merged_data[merged_data['key_rec'].isin(similar_movies.keys())]
+    result = merged_data.groupby('key_rec')['rating_rec'].mean().to_dict()
+
+    return result
+
+
+# If the code is run directly
+if __name__ == "__main__":
+    get_evaluation_score()
