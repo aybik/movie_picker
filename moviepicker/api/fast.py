@@ -46,7 +46,7 @@ def predict(
         user_genres: list,
         n_recommendations: int
     ):
-    result = advanced_model.recommend_movies_by_details(user_description, user_language, user_genres, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, n_recommendations)
+    result = advanced_model.recommend_movies_by_details_final(user_description, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, user_language, user_genres, n_recommendations)
     return result
 
 @app.get("/find")
