@@ -12,11 +12,11 @@ from tensorflow.keras.models import load_model
 app = FastAPI()
 parent_dir = os.path.dirname(os.path.dirname(__file__))
 
-# Load pickle files
+# Load pickle files #save
 app.state.model = pickle.load(open(os.path.join(parent_dir,"models/knn_20.pkl"), "rb"))
 app.state.latent_embeddings = pickle.load(open(os.path.join(parent_dir,"models/latent_embeddings.pkl"), "rb"))
 app.state.vectorizer = pickle.load(open(os.path.join(parent_dir,"models/vectorizer.pkl"), "rb"))
-app.state.encoder_trained = load_model(os.path.join(parent_dir,"models/encoder_model.keras"))
+app.state.encoder_trained = load_model(os.path.join(parent_dir,"models/encoder_trained.keras"))
 
 # Load dataframes
 app.state.data = pd.read_pickle(os.path.join(parent_dir,"data_encode.pkl"))
