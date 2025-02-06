@@ -140,25 +140,37 @@ def train_and_test_svd_model():
 
     return svd_model, predictions
 
-def get_movie_embeddings(svd_model, trainset):
+def get_movie_index_to_name_dict(svd_model, trainset):
     """
-    Create a mapping from internal movie indices to their original IDs and extract movie embeddings.
+    Create a mapping from internal movie indices to their original IDs.
 
     Parameters:
-        svd_model (SVD): The trained SVD model.
+        model (SVD): The trained SVD model.
         trainset (Trainset): The training dataset.
 
     Returns:
-        pd.DataFrame: A DataFrame containing movie embeddings with original IDs as index.
+        dict: A dictionary mapping internal movie indices to their original IDs.
     """
     mapping_dict = dict()
     for i in range(len(svd_model.qi)):
         mapping_dict[i] = trainset.to_raw_iid(i)
 
+    return mapping_dict
+
+def get_movie_mf_embeddings(svd_model, mapping_dict):
+    """
+    Extract movie embeddings from the trained SVD model.
+
+    Parameters:
+        model (SVD): The trained SVD model.
+        mapping_dict (dict): Dictionary mapping internal movie indices to original IDs.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing movie embeddings.
+    """
     embedding_movies = dict()
     for key in mapping_dict.keys():
         embedding_movies[mapping_dict[key]] = svd_model.qi[key]
-
     movie_embedding_mf = pd.DataFrame(embedding_movies).T
 
     return movie_embedding_mf
