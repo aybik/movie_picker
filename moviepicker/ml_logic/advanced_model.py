@@ -430,6 +430,51 @@ def recommend_movies_by_details(user_description, user_language, user_genres, df
 # recommendations_details = recommend_movies_by_details("people falling in love", "English", ["drama"], df, encoder_model, knn_model, vectorizer)
 # print("Recommendations based on user details:", recommendations_details)
 
+import nltk
+from nltk.corpus import wordnet
+nltk.download('wordnet')
+
+def get_extended_synonyms(word):
+    """
+    Retrieves synonyms from WordNet for a given word, keeping only single words.
+
+    Parameters:
+        word (str): The word to find synonyms for.
+
+    Returns:
+        set: A set of single-word synonyms.
+    """
+    synonyms = set()
+
+    for syn in wordnet.synsets(word):
+        for lemma in syn.lemmas():
+            clean_word = lemma.name().replace("_", " ")  # Replace underscores with spaces
+            if " " not in clean_word:  # Keep only single words
+                synonyms.add(clean_word)
+
+    return synonyms
+
+
+def expand_description(user_description):
+    """
+    Expands the user-provided description by adding synonyms for each word.
+
+    Parameters:
+        user_description (str): The input movie description.
+
+    Returns:
+        str: The enhanced description with additional synonyms.
+    """
+    final_words = set(user_description.split())  # Start with the original words
+    for w in user_description.split():
+        extended_synonyms = get_extended_synonyms(w)
+        final_words.update(extended_synonyms)  # Add synonyms
+
+    return " ".join(final_words)  # Return as a single string
+
+
+
+
 def recommend_movies_by_details_final(user_description, df, encoder_model, knn_model, vectorizer,
                                 user_language="English", user_genres=None,
                                 tfidf_dim=2500, n_recommendations=5, alpha=0.05):
@@ -463,7 +508,8 @@ def recommend_movies_by_details_final(user_description, df, encoder_model, knn_m
     ]]
 
     # 1️⃣ Convert the user description to a TF-IDF vector
-    user_tfidf = vectorizer.transform([user_description]).toarray()
+    enhanced_description = expand_description(user_description)
+    user_tfidf = vectorizer.transform([enhanced_description]).toarray()
 
     # 2️⃣ Encode the user language.
     # If the provided language is not in the dataset, default to "English"
