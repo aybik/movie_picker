@@ -3,6 +3,7 @@ import pickle
 import pandas as pd
 from surprise import Dataset, Reader, SVD, accuracy
 from surprise.model_selection import train_test_split
+from sklearn.neighbors import NearestNeighbors
 
 def save_pickle(obj, filepath):
     """
@@ -41,13 +42,13 @@ def load_data(df):
     Load a dataset from a pandas DataFrame and save it as a pickle file.
 
     Parameters:
-        df (pd.DataFrame): A DataFrame containing user ratings with columns ['user_name', 'film_id', 'rating'].
+        df (pd.DataFrame): A DataFrame containing user ratings with columns ['user_name', 'movie_id', 'rating'].
 
     Returns:
         Dataset: A Surprise dataset object.
     """
     reader = Reader(rating_scale=(0, 5))
-    data = Dataset.load_from_df(df[['user_name', 'film_id', 'rating']], reader)
+    data = Dataset.load_from_df(df[['user_name', 'movie_id', 'rating']], reader)
     save_pickle(data, '../../artifacts/dataset_b_surprise.pkl')
 
     return data
@@ -65,12 +66,12 @@ def split_train_test(data, test_size=0.25, random_state=42):
         tuple: A tuple containing the training set and test set.
     """
     trainset, testset = train_test_split(data, test_size=test_size, random_state=random_state)
-    save_pickle(trainset, '../../artifacts/trainset.pkl')
-    save_pickle(testset, '../../artifacts/testset.pkl')
+    save_pickle(trainset, '../../artifacts/trainset_svd_model.pkl')
+    save_pickle(testset, '../../artifacts/testset_svd_model.pkl')
 
     return trainset, testset
 
-def train_model(trainset, random_state=42):
+def train_svd_model(trainset, random_state=42):
     """
     Train an SVD model on the training set.
 
@@ -83,11 +84,11 @@ def train_model(trainset, random_state=42):
     """
     svd_model = SVD(random_state=random_state)
     svd_model.fit(trainset)
-    save_pickle(svd_model, '../../artifacts/fitted_svd.pkl')
+    save_pickle(svd_model, '../../artifacts/fitted_svd_model.pkl')
 
     return svd_model
 
-def evaluate_model(testset, model):
+def evaluate_svd_model(testset, model):
     """
     Evaluate the trained model on the test set using RMSE.
 
@@ -100,28 +101,28 @@ def evaluate_model(testset, model):
     """
     predictions = model.test(testset)
     rmse_score = accuracy.rmse(predictions)
-    save_pickle(predictions, '../../artifacts/predictions.pkl')
+    save_pickle(predictions, '../../artifacts/predictions_svd_model.pkl')
 
     return predictions, rmse_score
 
-def main_pipeline():
+def train_and_test_svd_model():
     """
-    Wrapper function to execute the full pipeline.
+    Execute the full recommendation pipeline, including data loading, model training, and evaluation.
 
-    Parameters:
-        df (pd.DataFrame): Input dataset containing user ratings.
+    Returns:
+        tuple: A tuple containing the trained svd model and its predictions.
     """
     dataset_path = '../../artifacts/cleaned_dataset_b.pkl'
-    data_path = '../../artifacts/dataset_surprise.pkl'
-    trainset_path = '../../artifacts/trainset.pkl'
-    testset_path = '../../artifacts/testset.pkl'
-    model_path = '../../artifacts/fitted_svd.pkl'
-    predictions_path = '../../artifacts/predictions.pkl'
+    data_path = '../../artifacts/dataset_b_surprise.pkl'
+    trainset_path = '../../artifacts/trainset_svd_model.pkl'
+    testset_path = '../../artifacts/testset_svd_model.pkl'
+    svd_model_path = '../../artifacts/fitted_svd_model.pkl'
+    predictions_path = '../../artifacts/predictions_svd_model.pkl'
 
     dataset_df = load_pickle(dataset_path)
-
-    if predictions is None:
-        print(f"Dataframe couldn't be loaded! Check if data path is correct.")
+    if dataset_df is None:
+        print("Dataset couldn't be loaded! Check if data path is correct.")
+        return None, None
 
     data = load_pickle(data_path) or load_data(dataset_df)
     trainset = load_pickle(trainset_path)
@@ -130,11 +131,80 @@ def main_pipeline():
     if trainset is None or testset is None:
         trainset, testset = split_train_test(data)
 
-    model = load_pickle(model_path) or train_model(trainset)
+    svd_model = load_pickle(svd_model_path) or train_svd_model(trainset)
     predictions = load_pickle(predictions_path)
 
     if predictions is None:
-        predictions, rmse_score = evaluate_model(testset, model)
+        predictions, rmse_score = evaluate_svd_model(testset, svd_model)
         print(f"Model RMSE: {rmse_score}")
 
-    return model, predictions
+    return svd_model, predictions
+
+def get_movie_index_to_name_dict(svd_model, trainset):
+    """
+    Create a mapping from internal movie indices to their original IDs.
+
+    Parameters:
+        model (SVD): The trained SVD model.
+        trainset (Trainset): The training dataset.
+
+    Returns:
+        dict: A dictionary mapping internal movie indices to their original IDs.
+    """
+    mapping_dict = dict()
+    for i in range(len(svd_model.qi)):
+        mapping_dict[i] = trainset.to_raw_iid(i)
+
+    return mapping_dict
+
+def get_movie_mf_embeddings(svd_model, mapping_dict):
+    """
+    Extract movie embeddings from the trained SVD model.
+
+    Parameters:
+        model (SVD): The trained SVD model.
+        mapping_dict (dict): Dictionary mapping internal movie indices to original IDs.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing movie embeddings.
+    """
+    embedding_movies = dict()
+    for key in mapping_dict.keys():
+        embedding_movies[mapping_dict[key]] = svd_model.qi[key]
+    movie_embedding_mf = pd.DataFrame(embedding_movies).T
+
+    return movie_embedding_mf
+
+def train_knn_for_movies(svd_model, movie_embedding_mf):
+    """
+    Train a k-NN model on movie embeddings extracted from the trained SVD model.
+
+    Returns:
+        NearestNeighbors: The trained k-NN model.
+    """
+    knn = NearestNeighbors(metric='cosine', algorithm='auto')
+    if svd_model:
+        knn.fit(movie_embedding_mf)
+        save_pickle(knn, '../../artifacts/fitted_knn_svd_model.pkl')
+
+        return knn
+    return None
+
+def get_similar_movies_knn_mf(knn_model, movie_embedding_mf, movie_name, mapping_dict, n_neighbors=10):
+    """
+    Find similar movies based on cosine similarity using k-NN.
+
+    Parameters:
+        model (NearestNeighbors): The trained k-NN model.
+        movie_embedding_mf (pd.DataFrame): Movie embeddings matrix.
+        movie_name (str): The name of the target movie.
+        mapping_dict (dict): Dictionary mapping internal movie indices to original IDs.
+        n_neighbors (int): Number of similar movies to retrieve (default: 10).
+
+    Returns:
+        list: A list of similar movies.
+    """
+    embedding_vector = movie_embedding_mf.loc[movie_name].tolist()
+    distances, indices = knn_model.kneighbors([embedding_vector], n_neighbors=n_neighbors+1)
+
+    return [mapping_dict[x] for x in indices[0][1:]]
