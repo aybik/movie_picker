@@ -429,3 +429,92 @@ def recommend_movies_by_details(user_description, user_language, user_genres, df
 # # Get recommendations based on user details
 # recommendations_details = recommend_movies_by_details("people falling in love", "English", ["drama"], df, encoder_model, knn_model, vectorizer)
 # print("Recommendations based on user details:", recommendations_details)
+
+def recommend_movies_by_details_final(user_description, df, encoder_model, knn_model, vectorizer,
+                                user_language="English", user_genres=None,
+                                tfidf_dim=2500, n_recommendations=5, alpha=0.05):
+    """
+    Finds similar movies based on a user-provided description, language, and genres, incorporating rating effects.
+
+    Parameters:
+        user_description (str): The user's movie description input.
+        df (pd.DataFrame): The dataset containing movies.
+        encoder_model (tf.keras.Model): The trained encoder model.
+        knn_model (NearestNeighbors): The trained KNN model.
+        vectorizer (TfidfVectorizer): The TF-IDF vectorizer used during training.
+        user_language (str): The user's selected language. Defaults to "English".
+        user_genres (list): A list of genres selected by the user. Defaults to ["thriller"] if not provided.
+        tfidf_dim (int): The number of TF-IDF features.
+        n_recommendations (int): Number of movie recommendations to return.
+        alpha (float): Scaling factor for rating impact on similarity.
+
+    Returns:
+        list: A list of recommended movie keys.
+    """
+    # Set default genres if none are provided
+    if user_genres is None:
+        user_genres = ["thriller"]
+
+    # Define genre columns (should match those used during training)
+    genre_columns = [col for col in df.columns if col in [
+        'action', 'adventure', 'animation', 'comedy', 'crime', 'documentary',
+        'drama', 'family', 'fantasy', 'history', 'horror', 'music', 'mystery',
+        'romance', 'science_fiction', 'thriller', 'tv_movie', 'war', 'western'
+    ]]
+
+    # 1️⃣ Convert the user description to a TF-IDF vector
+    user_tfidf = vectorizer.transform([user_description]).toarray()
+
+    # 2️⃣ Encode the user language.
+    # If the provided language is not in the dataset, default to "English"
+    if user_language in df["language"].values:
+        lang_val = df.loc[df["language"] == user_language, "language_encoded"].values[0]
+    else:
+        default_language = "English"
+        if default_language in df["language"].values:
+            lang_val = df.loc[df["language"] == default_language, "language_encoded"].values[0]
+        else:
+            lang_val = 0  # Fallback value if English is not found
+    user_language_encoded = np.array([[lang_val]], dtype=np.int32)
+
+    # 3️⃣ Extract the one-hot encoded genre vector directly
+    user_genre_vector = np.zeros((1, len(genre_columns)), dtype=np.int32)
+    for genre in user_genres:
+        if genre in genre_columns:
+            user_genre_vector[0, genre_columns.index(genre)] = 1
+
+    # 4️⃣ Generate latent embedding using the trained encoder model
+    user_embedding = encoder_model.predict([user_tfidf, user_language_encoded, user_genre_vector])
+
+    # 5️⃣ Use KNN to find similar movies
+    distances, indices = knn_model.kneighbors(user_embedding)
+    indices = indices.flatten()
+    distances = distances.flatten()
+
+    # 6️⃣ Compute similarity scores (higher similarity = better match)
+    similarity_scores = [1 / (1 + dist) for dist in distances]
+
+    # 7️⃣ Extract movie names and their similarity scores
+    df = df.reset_index(drop=True)
+    similar_movies = [df.iloc[idx]["name"] for idx in indices][:n_recommendations]
+    similar_similarities = [sim for sim in similarity_scores][:n_recommendations]
+
+    # 8️⃣ Adjust similarity using ratings
+    adjusted_similarities = []
+    for movie, sim in zip(similar_movies, similar_similarities):
+        rating = df.loc[df["name"] == movie, "combined_rating"]
+        if not rating.empty:
+            adjusted_sim = sim + (float(rating.values[0]) * alpha)  # Increase similarity with rating
+        else:
+            adjusted_sim = sim  # No rating adjustment if rating is missing
+        adjusted_similarities.append(adjusted_sim)
+
+    # 9️⃣ Sort by adjusted similarity scores (higher is better)
+    sorted_recommendations = sorted(zip(similar_movies, adjusted_similarities),
+                                    key=lambda x: x[1], reverse=True)[:n_recommendations]
+
+    # 🔹 Return only the "key" column values for recommended movies
+    recommended_keys = [df.loc[df["name"] == movie, "key"].values[0]
+                        for movie, _ in sorted_recommendations]
+
+    return recommended_keys if recommended_keys else {"message": "No recommendations found."}
