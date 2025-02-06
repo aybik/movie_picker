@@ -43,24 +43,34 @@ def predict(
 def predict(
         user_description: str,
         user_language: str,
-        user_genres: str,
+        user_genres: list,
         n_recommendations: int
     ):
-    user_genres = list(user_genres)
     result = advanced_model.recommend_movies_by_details(user_description, user_language, user_genres, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, n_recommendations)
     return result
 
 @app.get("/find")
+# def find_movies(input_name, dataset_choice):
+#     if dataset_choice == "full":
+#         df = app.state.full_data
+#     elif dataset_choice == "final":
+#         df = app.state.data
+#     movie_name = input_name.lower()
+#     df['name'] = df.name.apply(lambda x: x.lower())
+#     same_movies_df = df[df.name == movie_name]
+#     return list(same_movies_df.key)
 def find_movies(input_name, dataset_choice):
+    movie_name_words = set(input_name.lower().split())
+    def word_match(name):
+        name_words = set(name.lower().split())  # Convert movie name in df to a set of words
+        return not movie_name_words.isdisjoint(name_words)  # Check if there is an exact word match
     if dataset_choice == "full":
         df = app.state.full_data
+        same_movies_df = df[df['name'].apply(word_match)]
     elif dataset_choice == "final":
         df = app.state.data
-    movie_name = input_name.lower()
-    df['name'] = df.name.apply(lambda x: x.lower())
-    same_movies_df = df[df.name == movie_name]
+        same_movies_df = df[df['name_streamlit'].apply(word_match)]
     return list(same_movies_df.key)
-
 
 @app.get("/get_url")
 def get_url(movie):
