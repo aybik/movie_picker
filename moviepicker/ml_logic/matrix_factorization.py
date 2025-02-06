@@ -207,4 +207,4 @@ def get_similar_movies_knn_mf(knn_model, movie_embedding_mf, movie_name, mapping
     embedding_vector = movie_embedding_mf.loc[movie_name].tolist()
     distances, indices = knn_model.kneighbors([embedding_vector], n_neighbors=n_neighbors+1)
 
-    return [mapping_dict[x] for x in indices[0]]
+    return [mapping_dict[x] for x in indices[0][1:]]
