@@ -8,6 +8,7 @@ import re
 import requests
 import string
 from tensorflow.keras.models import load_model
+# from typing import List
 
 app = FastAPI()
 parent_dir = os.path.dirname(os.path.dirname(__file__))
@@ -43,10 +44,11 @@ def predict(
 def predict(
         user_description: str,
         user_language: str,
-        user_genres: list,
+        # user_genres: List[str],
+        user_genres: str,
         n_recommendations: int
     ):
-    result = advanced_model.recommend_movies_by_details_final(user_description, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, user_language, user_genres, n_recommendations)
+    result = advanced_model.recommend_movies_by_details_new(user_description, app.state.data, app.state.encoder_trained, app.state.model, app.state.vectorizer, user_language, user_genres, n_recommendations)
     return result
 
 @app.get("/find")
