@@ -3,8 +3,7 @@ import pickle
 import pandas as pd
 from tqdm import tqdm
 import sqlite3
-import model as m
-import matrix_factorization as mf
+import advanced_model as am
 
 # Pickle functions
 def save_pickle(my_obj, filepath):
@@ -103,10 +102,11 @@ def get_eval_metric(conn, query_movie, similar_movies, use_avg_per_recommendatio
         return conn.execute(query, params).fetchone()
 
 # Main Evaluation Logic
-def get_evaluation_score(model, movie_embedding_df, mapping_dict, processed_data, filtered_validation_data, db_path=None,
+def get_evaluation_score(model, latent_embeddings, processed_data, filtered_validation_data,
+                         db_path=None,
                          top_movies_path = '../../artifacts/top25k_rated_movies.pkl',
-                         similar_movies_path = '../../artifacts/svd_knn_similar_movies_top25k.pkl',
-                         results_path = '../../artifacts/results_svd_knn_top25k.pkl'):
+                         similar_movies_path = '../../artifacts/nn_knn_similar_movies_top25k.pkl',
+                         results_path = '../../artifacts/results_nn_knn_top25k.pkl'):
     """
     Executes the main workflow for movie evaluation.
     """
@@ -130,7 +130,7 @@ def get_evaluation_score(model, movie_embedding_df, mapping_dict, processed_data
 
         for movie in tqdm(top_movies):
             try:
-                similar_movies[movie] = mf.get_similar_movies_knn_mf(model, movie_embedding_df, movie, mapping_dict, n_neighbors=10)
+                similar_movies[movie] = am.get_movie_recommendations(movie, processed_data, model, latent_embeddings, n_recommendations=10)
             except Exception:
                 failed_indices.append(movie)
                 print("failed")
